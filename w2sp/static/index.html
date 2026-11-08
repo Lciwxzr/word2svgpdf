@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Word → PDF 矢量图替换</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --text:#e6e9ef; --muted:#8b93a7; --accent:#4c9aff; --ok:#34c759;
+    --warn:#ff9f0a; --err:#ff453a; --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.55 -apple-system,"Segoe UI",system-ui,"Microsoft YaHei",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 20px 60px}
+  h1{font-size:19px;font-weight:600;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:22px}
+
+  /* ---------- input / output ---------- */
+  .flow{display:grid;grid-template-columns:1fr 52px 1fr;gap:0;align-items:stretch}
+  .inpane{display:flex;flex-direction:column;gap:10px}
+  .drop{
+    border:1.5px dashed var(--line);border-radius:12px;background:var(--panel);
+    padding:14px 16px;display:flex;flex-direction:column;justify-content:center;
+    gap:9px;transition:.16s;position:relative;min-height:88px;
+  }
+  .drop.hover{border-color:var(--accent);background:#1b2230}
+  .drop.filled{border-style:solid;border-color:#2f3a4d}
+  .drop h3{margin:0;font-size:12px;font-weight:600;color:var(--muted);
+           letter-spacing:.4px;text-transform:uppercase}
+  .file{display:flex;align-items:center;gap:9px;background:var(--panel2);
+        border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px}
+  .file .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file .sz{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+  .file .x{color:var(--muted);cursor:pointer;padding:0 3px}
+  .file .x:hover{color:var(--err)}
+  .hint{color:var(--muted);font-size:12.5px}
+  .arrow{display:flex;align-items:center;justify-content:center;color:var(--line)}
+  .arrow svg{width:36px;height:36px}
+  .arrow.on{color:var(--accent)}
+
+  .outbox{border:1.5px solid var(--line);border-radius:12px;background:var(--panel);
+          padding:16px;display:flex;flex-direction:column;justify-content:center;gap:10px}
+  .btn{background:var(--accent);color:#fff;border:0;border-radius:9px;
+       padding:11px 16px;font-size:14px;font-weight:600;cursor:pointer;width:100%}
+  .btn:disabled{background:#2b3140;color:#5d6577;cursor:not-allowed}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text);font-weight:500}
+  .btn.ghost:hover{border-color:var(--accent)}
+
+  .dpirow{display:flex;flex-direction:column;gap:5px;margin:2px 0 4px}
+  .dpirow label{font-size:11.5px;color:var(--muted);letter-spacing:.3px;
+                text-transform:uppercase}
+  .dpirow select{width:100%;background:var(--panel2);border:1px solid var(--line);
+    color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer}
+  .dpirow select:focus{outline:1px solid var(--accent)}
+  .dpirow select:disabled{opacity:.55;cursor:not-allowed}
+
+  /* ---------- progress ---------- */
+  .prog{margin-top:18px;display:none}
+  .prog.on{display:block}
+  .bar{height:4px;background:var(--panel2);border-radius:3px;overflow:hidden}
+  .bar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .4s ease}
+  .bar>i.indet{width:35%;animation:slide 1.1s infinite ease-in-out}
+  @keyframes slide{0%{margin-left:-35%}100%{margin-left:100%}}
+  .log{margin-top:10px;background:var(--panel);border:1px solid var(--line);
+       border-radius:8px;padding:10px 12px;max-height:130px;overflow:auto;
+       font:12.5px/1.65 var(--mono);color:var(--muted)}
+  .log div:last-child{color:var(--text)}
+
+  /* ---------- compare ---------- */
+  section{margin-top:30px;display:none}
+  section.on{display:block}
+  .sect-h{display:flex;align-items:center;gap:10px;margin-bottom:11px;flex-wrap:wrap}
+  .sect-h h2{font-size:15px;font-weight:600;margin:0}
+  .scope{display:flex;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .scope button{background:transparent;border:0;color:var(--muted);padding:7px 14px;
+                font-size:13px;cursor:pointer}
+  .scope button.on{background:#20304a;color:#cfe1ff}
+  .tabs{display:flex;gap:5px;margin-left:auto}
+  .tab{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+       border-radius:7px;padding:6px 11px;font-size:12.5px;cursor:pointer}
+  .tab.on{background:#20304a;border-color:var(--accent);color:#cfe1ff}
+
+  .nav{display:flex;align-items:center;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+  .nav .pg{display:flex;align-items:center;gap:6px;background:var(--panel2);
+           border:1px solid var(--line);border-radius:7px;padding:3px 6px}
+  .nav .pg button{background:transparent;border:0;color:var(--text);cursor:pointer;
+                  padding:2px 7px;font-size:14px;line-height:1}
+  .nav .pg button:disabled{color:#4a5163;cursor:not-allowed}
+  .nav input[type=number]{width:52px;background:transparent;border:0;color:var(--text);
+    font:13px var(--mono);text-align:center;padding:3px 0}
+  .nav input:focus{outline:1px solid var(--accent);border-radius:4px}
+  .nav .total{color:var(--muted);font-size:12.5px}
+  .nav .fignav{display:flex;gap:5px;flex-wrap:wrap}
+  .nav .fignav button{background:transparent;border:1px solid var(--line);color:var(--muted);
+                border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer}
+  .nav .fignav button.on{background:#2a3a55;border-color:var(--accent);color:#cfe1ff}
+  .pagemark{display:flex;gap:3px;flex-wrap:wrap;margin-left:auto}
+  .pagemark i{width:8px;height:8px;border-radius:2px;background:#262b36;
+              cursor:pointer;display:block}
+  .pagemark i.has{background:#3b5a8a}
+  .pagemark i.cur{background:var(--accent)}
+
+  .cmp{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+       padding:13px;position:relative;user-select:none}
+  .cmp .head{display:flex;justify-content:space-between;font-size:12px;
+             color:var(--muted);margin-bottom:9px;gap:8px}
+  .stage{position:relative;overflow:hidden;border-radius:8px;background:#fff;
+         line-height:0;cursor:col-resize;touch-action:none}
+  .stage.sbs{display:flex;flex-direction:row}
+  .stage>img{display:block;width:100%;height:auto;pointer-events:none}
+  .stage.sbs>img{width:50%}
+  .stage .top{position:absolute;inset:0}
+  .stage .clip{position:absolute;inset:0;overflow:hidden}
+  .stage .clip img{display:block;width:100%;height:auto;pointer-events:none}
+  .divider{position:absolute;top:0;bottom:0;width:2px;background:var(--accent);
+           box-shadow:0 0 0 1px rgba(76,154,255,.35);pointer-events:none}
+  .divider::after{content:"";position:absolute;left:50%;top:50%;
+           width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;
+           background:var(--accent);box-shadow:0 2px 8px rgba(0,0,0,.4)}
+  .mode-hint{color:var(--muted);font-size:12px;margin-top:9px}
+
+  /* ---------- report ---------- */
+  .verdict{border-radius:11px;padding:14px 16px;display:flex;gap:12px;
+           align-items:center;font-weight:600}
+  .verdict.ok{background:#12301c;border:1px solid #1f5c33;color:#7ef0a0}
+  .verdict.bad{background:#33161a;border:1px solid #6b2429;color:#ff9a94}
+  .verdict .big{font-size:17px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));
+         gap:10px;margin-top:13px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 13px}
+  .card .k{color:var(--muted);font-size:11.5px;letter-spacing:.3px;
+           text-transform:uppercase;margin-bottom:5px}
+  .card .v{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums}
+  .card .v.sm{font-size:14px;font-weight:500}
+
+  table{width:100%;border-collapse:collapse;margin-top:13px;font-size:12.5px}
+  th{text-align:left;color:var(--muted);font-weight:500;font-size:11.5px;
+     text-transform:uppercase;letter-spacing:.3px;padding:7px 9px;
+     border-bottom:1px solid var(--line)}
+  td{padding:7px 9px;border-bottom:1px solid #21252f;vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  tr.clickable{cursor:pointer}
+  tr.clickable:hover{background:#1b1f28}
+  .pill{border-radius:5px;padding:2px 7px;font-size:11.5px;font-weight:600;display:inline-block}
+  .pill.ok{background:#153a22;color:#7ef0a0}
+  .pill.rep{background:#20304a;color:#8fc0ff}
+  .pill.amb{background:#3a2c12;color:#ffc46b}
+  .pill.nom{background:#33161a;color:#ff9a94}
+  .pill.tiny{background:#2c2a16;color:#e0d48a}
+  .mono{font-family:var(--mono);font-size:12px}
+  .err-box{background:#33161a;border:1px solid #6b2429;color:#ff9a94;
+           border-radius:9px;padding:12px 14px;font-family:var(--mono);font-size:12.5px}
+
+  /* ---------- match table ---------- */
+  .mrow{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+        margin-bottom:9px;overflow:hidden}
+  .mrow.pinned{border-color:var(--accent)}
+  .mrow.amb{border-color:#6b5a24}
+  .mhead{display:flex;align-items:center;gap:11px;padding:11px 13px;
+         cursor:pointer;flex-wrap:wrap}
+  .mhead:hover{background:#1b1f28}
+  .mhead .idx{font-weight:600;min-width:46px}
+  .mhead .meta{color:var(--muted);font-size:12.5px;flex:1;min-width:180px}
+  .mhead .acts{display:flex;gap:6px;flex-shrink:0}
+  .mhead .acts button{background:var(--panel2);border:1px solid var(--line);
+    color:var(--text);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer}
+  .mhead .acts button:hover{border-color:var(--accent)}
+  .mhead .acts button.on{background:#2a3a55;border-color:var(--accent);color:#cfe1ff}
+  .mbody{display:none;padding:0 13px 13px;border-top:1px solid var(--line)}
+  .mrow.open .mbody{display:block}
+  .candgrid{display:flex;gap:10px;flex-wrap:wrap;margin-top:11px}
+  .cand{width:168px;background:var(--panel2);border:1px solid var(--line);
+        border-radius:8px;padding:7px;cursor:pointer;transition:.14s}
+  .cand:hover{border-color:var(--accent)}
+  .cand.cur{border-color:var(--accent);background:#1e2a3d}
+  .cand img{width:100%;height:96px;object-fit:contain;background:#fff;
+            border-radius:5px;display:block}
+  .cand .cl{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.45}
+  .cand .cl b{color:var(--text)}
+
+  /* two-column body: reference on the left, candidates on the right */
+  .mcols{display:grid;grid-template-columns:minmax(240px,380px) 1fr;gap:16px;
+         margin-top:12px;align-items:start}
+  .mcol.ref img{width:100%;background:#fff;border-radius:6px;display:block;
+                border:1px solid var(--line)}
+  .collab{font-size:11.5px;color:var(--muted);margin-bottom:7px;
+          display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .clearsvg{background:transparent;border:1px solid var(--line);color:var(--muted);
+            border-radius:6px;padding:3px 9px;font-size:11.5px;cursor:pointer}
+  .clearsvg:hover{border-color:var(--err);color:var(--err)}
+
+  /* the dashed "drop an SVG here" tile at the end of the candidate row */
+  .cand.svgdrop{border:1.5px dashed var(--line);background:transparent;
+                display:flex;flex-direction:column;align-items:center;
+                justify-content:center;min-height:150px;text-align:center;
+                gap:5px;padding:10px}
+  .cand.svgdrop:hover,.cand.svgdrop.hot{border-color:var(--accent);
+                background:#18202c}
+  .cand.svgdrop .svgicon{font-size:22px;color:var(--muted);line-height:1}
+  .cand.svgdrop.hot .svgicon,.cand.svgdrop:hover .svgicon{color:var(--accent)}
+  .cand.svgdrop .cl{margin-top:0;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Word → PDF 矢量图替换</h1>
+  <div class="sub">把 Word 里被栅格化的图换成矢量版本，并逐页校验其余内容未改动。</div>
+
+  <!-- ============ 输入（上下两栏）→ 输出 ============ -->
+  <div class="flow">
+    <div class="inpane">
+      <div class="drop" id="dDocx">
+        <h3>上栏 · Word 文档</h3>
+        <div class="hint" id="hintDocx">拖入 .docx（图片以 SVG 内嵌）或点击选择</div>
+        <div id="fileDocx"></div>
+        <input type="file" id="fDocx" accept=".docx" style="display:none">
+      </div>
+      <div class="drop" id="dPdf">
+        <h3>下栏 · 导出的 PDF</h3>
+        <div class="hint" id="hintPdf">拖入同一个文档导出的 .pdf 或点击选择</div>
+        <div id="filePdf"></div>
+        <input type="file" id="fPdf" accept=".pdf" style="display:none">
+      </div>
+    </div>
+
+    <div class="arrow" id="arrow">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M5 12h13M13 6l6 6-6 6"/>
+      </svg>
+    </div>
+
+    <div class="outbox">
+      <h3 style="margin:0;font-size:12px;font-weight:600;color:var(--muted);
+                 letter-spacing:.4px;text-transform:uppercase">输出</h3>
+      <div class="hint" id="outHint">替换结果会出现在这里</div>
+      <div id="outFiles"></div>
+
+      <div class="dpirow">
+        <label for="dpiSel">内嵌照片分辨率</label>
+        <select id="dpiSel">
+          <option value="0" selected>保持原样（不重压缩）</option>
+          <option value="600">600 dpi（体积均衡）</option>
+          <option value="300">300 dpi（最小体积）</option>
+          <option value="900">900 dpi（高清晰度）</option>
+          <option value="1200">1200 dpi（接近原图）</option>
+        </select>
+      </div>
+
+      <button class="btn" id="go" disabled>① 匹配图</button>
+      <button class="btn" id="doConvert" disabled style="display:none">② 开始转换</button>
+      <button class="btn ghost" id="dl" style="display:none">另存为 *_vec.pdf</button>
+      <div class="hint" id="dlHint" style="display:none;font-size:11.5px;text-align:center"></div>
+    </div>
+  </div>
+
+  <div class="prog" id="prog">
+    <div class="bar"><i id="barfill"></i></div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <!-- ============ 匹配结果（转换前可检查、可修改） ============ -->
+  <section id="sMatch">
+    <div class="sect-h">
+      <h2>图区匹配</h2>
+      <div class="hint" style="margin-left:auto;font-size:12px">
+        确认无误后点「② 开始转换」；需要改的图可在候选里另选
+      </div>
+    </div>
+    <div id="matchList"></div>
+  </section>
+
+  <!-- ============ 对比：逐页 / 图元素 ============ -->
+  <section id="sCompare">
+    <div class="sect-h">
+      <h2>对比校对</h2>
+      <div class="scope">
+        <button data-scope="page" class="on">逐页对比</button>
+        <button data-scope="figure">图元素对比</button>
+      </div>
+      <div class="tabs">
+        <button class="tab on" data-mode="wipe">扫描线</button>
+        <button class="tab" data-mode="overlay">半透明叠层</button>
+        <button class="tab" data-mode="side">左右并排</button>
+      </div>
+    </div>
+
+    <div class="nav" id="nav"></div>
+
+    <div class="cmp">
+      <div class="head">
+        <span>← 原 PDF</span>
+        <span id="cmpLabel"></span>
+        <span>替换后 →</span>
+      </div>
+      <div class="stage" id="stage">
+        <img id="imgOrig" alt="原">
+        <img id="sideNew" alt="新" style="display:none">
+        <div class="top" id="topWrap">
+          <div class="clip" id="topClip"><img id="imgNew" alt="新"></div>
+        </div>
+        <div class="divider" id="divider" style="left:50%"></div>
+      </div>
+      <div class="mode-hint" id="modeHint"></div>
+    </div>
+  </section>
+
+  <!-- ============ 报告 ============ -->
+  <section id="sReport">
+    <div class="sect-h"><h2>校验报告</h2></div>
+    <div id="verdict"></div>
+    <div class="cards" id="cards"></div>
+    <div id="figTable"></div>
+    <div id="pageTable"></div>
+    <div id="errBox"></div>
+  </section>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const state = {
+  docx:null, pdf:null, job:null, report:null, namePdf:null,
+  scope:"page", mode:"wipe", pos:0.5,
+  page:1, pageCount:0, figIdx:0, figs:[]
+};
+
+function fmtSize(n){
+  if(n < 1024) return n + " B";
+  if(n < 1024*1024) return (n/1024).toFixed(1) + " KB";
+  return (n/1024/1024).toFixed(2) + " MB";
+}
+
+/* ---------------- file intake (two stacked drops) ---------------- */
+function addFile(file, kind){
+  state[kind] = file;
+  render();
+}
+
+function render(){
+  const mk = (file, kind, box) => {
+    box.innerHTML = "";
+    if(!file) return;
+    const d = document.createElement("div");
+    d.className = "file";
+    d.innerHTML = `<span>📄</span><span class="n">${file.name}</span>
+                   <span class="sz">${fmtSize(file.size)}</span>
+                   <span class="x" data-k="${kind}">✕</span>`;
+    box.appendChild(d);
+  };
+  mk(state.docx, "docx", $("#fileDocx"));
+  mk(state.pdf,  "pdf",  $("#filePdf"));
+  $("#hintDocx").style.display = state.docx ? "none" : "block";
+  $("#hintPdf").style.display  = state.pdf  ? "none" : "block";
+  $("#dDocx").classList.toggle("filled", !!state.docx);
+  $("#dPdf").classList.toggle("filled", !!state.pdf);
+
+  const ready = !!(state.docx && state.pdf);
+  $("#go").disabled = !ready;
+  $("#arrow").classList.toggle("on", ready);
+  if(!ready){
+    // changing the inputs invalidates any analysis done for the old pair
+    $("#doConvert").style.display = "none";
+    $("#sMatch").classList.remove("on");
+    state.job = null;
+  }
+}
+
+$("#dDocx").addEventListener("click", e => {
+  if(e.target.classList.contains("x")) return;
+  $("#fDocx").click();
+});
+$("#dPdf").addEventListener("click", e => {
+  if(e.target.classList.contains("x")) return;
+  $("#fPdf").click();
+});
+$("#fDocx").addEventListener("change", e => {
+  if(e.target.files[0]) addFile(e.target.files[0], "docx");
+});
+$("#fPdf").addEventListener("change", e => {
+  if(e.target.files[0]) addFile(e.target.files[0], "pdf");
+});
+document.addEventListener("click", e => {
+  if(e.target.classList.contains("x")){
+    state[e.target.dataset.k] = null;
+    render();
+  }
+});
+
+/* drag & drop: each pane takes only its own type, but a drop anywhere
+   on the input column files each item into the right slot */
+function wireDrop(el, kind){
+  ["dragenter","dragover"].forEach(ev => el.addEventListener(ev, e => {
+    e.preventDefault(); el.classList.add("hover");
+  }));
+  ["dragleave","drop"].forEach(ev => el.addEventListener(ev, e => {
+    e.preventDefault(); el.classList.remove("hover");
+  }));
+  el.addEventListener("drop", e => {
+    for(const f of e.dataTransfer.files){
+      const n = f.name.toLowerCase();
+      if(n.endsWith(".docx")) addFile(f, "docx");
+      else if(n.endsWith(".pdf")) addFile(f, "pdf");
+    }
+  });
+}
+wireDrop($("#dDocx"), "docx");
+wireDrop($("#dPdf"),  "pdf");
+
+/* ---------------- stage 1: analyse (匹配图) ---------------- */
+$("#go").addEventListener("click", async () => {
+  $("#go").disabled = true;
+  $("#doConvert").style.display = "none";
+  $("#prog").classList.add("on");
+  $("#log").innerHTML = "";
+  $("#barfill").className = "indet";
+  $("#barfill").style.width = "0";
+  $("#outHint").textContent = "匹配中…";
+  $("#dpiSel").disabled = true;
+
+  const fd = new FormData();
+  fd.append("docx", state.docx);
+  fd.append("pdf", state.pdf);
+  fd.append("dpi", $("#dpiSel").value);
+
+  const r = await fetch("/api/upload", {method:"POST", body:fd});
+  const j = await r.json();
+  if(j.error){ showErr(j.error); return; }
+  state.job = j.job;
+  seen = 0;
+  poll("analyse");
+});
+
+/* ---------------- stage 2: convert (开始转换) ---------------- */
+$("#doConvert").addEventListener("click", async () => {
+  $("#doConvert").disabled = true;
+  $("#go").disabled = true;
+  $("#prog").classList.add("on");
+  $("#log").innerHTML = "";
+  $("#barfill").className = "indet";
+  $("#barfill").style.width = "0";
+  $("#outHint").textContent = "转换中…";
+
+  const r = await fetch(`/api/convert/${state.job}`, {method:"POST"});
+  const j = await r.json();
+  if(j.error){ showErr(j.error); return; }
+  seen = 0;
+  poll("convert");
+});
+
+function log(msg){
+  const d = document.createElement("div");
+  d.textContent = msg;
+  $("#log").appendChild(d);
+  $("#log").scrollTop = 1e9;
+}
+
+let seen = 0;
+async function poll(phase){
+  const r = await fetch(`/api/status/${state.job}`);
+  const s = await r.json();
+  for(; seen < s.events.length; seen++) log(s.events[seen].message);
+
+  if(s.error){ showErr(s.error); return; }
+
+  const busy = s.analysing || s.converting;
+  if(busy){ setTimeout(() => poll(phase), 400); return; }
+
+  state.report = s.report;
+  state.namePdf = s.name_pdf || (state.pdf ? state.pdf.name : null);
+  $("#barfill").className = "";
+  $("#barfill").style.width = "100%";
+
+  renderMatchTable(s);
+
+  if(phase === "convert" && s.ready){
+    finish(s);
+  } else {
+    // analysis finished: show the table and offer the convert button
+    $("#sMatch").classList.add("on");
+    $("#doConvert").style.display = "block";
+    $("#doConvert").disabled = false;
+    $("#go").disabled = false;
+    $("#outHint").textContent = "已匹配，确认后点「② 开始转换」";
+    const n = (s.figures || []).filter(f => f.status === "replace").length;
+    const a = (s.figures || []).filter(f => f.status === "ambiguous").length;
+    log(`匹配完成：${n} 张待替换${a ? `，${a} 张待确认` : ""}`);
+  }
+}
+
+function showErr(msg){
+  $("#barfill").className = "";
+  $("#barfill").style.width = "100%";
+  $("#barfill").style.background = "var(--err)";
+  $("#errBox").innerHTML = `<div class="err-box">${msg}</div>`;
+  $("#sReport").classList.add("on");
+  $("#go").disabled = false;
+  $("#doConvert").disabled = false;
+  $("#dpiSel").disabled = false;
+  log("失败：" + msg);
+}
+
+/* ---------------- match table: inspect + correct ---------------- */
+const STATUS_TEXT = {
+  replace:   ["已匹配", "rep"],
+  vector:    ["原为矢量", "ok"],
+  ambiguous: ["待确认", "amb"],
+  "no-match":["未找到", "nom"],
+  skipped:   ["已跳过", "nom"],
+};
+
+function renderMatchTable(s){
+  const figs = (s.figures || []).filter(f => f.status !== "vector");
+  const vecCount = (s.figures || []).length - figs.length;
+  const box = $("#matchList");
+
+  if(!figs.length){
+    box.innerHTML = `<div class="callout-ish" style="color:var(--muted);
+      font-size:13px">没有需要替换的图${vecCount ? `（${vecCount} 张已是矢量）` : ""}。</div>`;
+    return;
+  }
+
+  box.innerHTML = figs.map(f => {
+    const [txt, cls] = STATUS_TEXT[f.status] || [f.status, ""];
+    const pinned = f.overridden;
+    const rowCls = ["mrow", pinned ? "pinned" : "",
+                    f.status === "ambiguous" ? "amb" : ""].join(" ");
+    const cands = (f.candidates || []).slice(0, 6);
+
+    // LEFT: the reference -- what Word put in the PDF for this figure
+    const refSrc = `/api/reference?job=${state.job}&index=${f.index}`;
+    // RIGHT: candidates, each a placement in the PDF; the last tile is a
+    // dashed drop zone for supplying a different SVG source
+    const candHtml = (cands.length ? cands.map((c, i) => {
+      const cur = (f.page === c.page &&
+                   JSON.stringify(f.rect) === JSON.stringify(c.rect));
+      const bits = [`p${c.page}`];
+      if(c.content !== null && c.content !== undefined) bits.push(`相似 ${c.content}`);
+      if(c.size_ok) bits.push("尺寸吻合");
+      return `<div class="cand ${cur ? "cur" : ""}" data-fig="${f.index}"
+                   data-page="${c.page}" data-rect='${JSON.stringify(c.rect)}'>
+        <img loading="lazy" src="/api/candidate?job=${state.job}&page=${c.page}&rect=${c.rect.join(",")}&dpi=80">
+        <div class="cl"><b>候选 ${i + 1}</b> · ${bits.join(" · ")}</div>
+      </div>`;
+    }).join("") : `<div style="color:var(--muted);font-size:12.5px">
+        PDF 里没有可选的位图（这张可能已经是矢量）</div>`)
+      + `<div class="cand svgdrop" data-fig="${f.index}">
+           <div class="svgicon">＋</div>
+           <div class="cl"><b>拖入 SVG</b><br>替换这张的源图</div>
+           <input type="file" accept=".svg" class="svgfile" data-fig="${f.index}" style="display:none">
+         </div>`;
+
+    const srcTag = f.custom_svg
+      ? `<span class="pill rep">自定义 SVG</span>
+         <button class="clearsvg" data-fig="${f.index}">恢复 docx 源图</button>`
+      : (f.svg ? '<span class="pill">docx 内嵌 SVG</span>'
+               : '<span class="pill nom">无矢量源</span>');
+
+    return `<div class="${rowCls}" data-idx="${f.index}">
+      <div class="mhead">
+        <span class="idx">图 ${f.index}</span>
+        <span class="meta">${f.w_pt}×${f.h_pt} pt · ${f.note}</span>
+        ${srcTag}
+        <span class="pill ${cls}">${txt}</span>
+        <span class="acts">
+          <button class="exp">展开</button>
+          <button class="skip ${f.status === "skipped" ? "on" : ""}">跳过</button>
+          ${pinned ? '<button class="clr">撤销</button>' : ""}
+        </span>
+      </div>
+      <div class="mbody">
+        <div class="mcols">
+          <div class="mcol ref">
+            <div class="collab">参考图 · PDF 里这张（Word 导出的位图）</div>
+            <img loading="lazy" src="${refSrc}">
+          </div>
+          <div class="mcol">
+            <div class="collab">候选位图 · 点一个即可把图放到那里</div>
+            <div class="candgrid">${candHtml}</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+
+  // ---- interactions
+  box.querySelectorAll(".mhead").forEach(h => {
+    h.addEventListener("click", e => {
+      if(e.target.tagName === "BUTTON") return;
+      h.parentElement.classList.toggle("open");
+    });
+  });
+  box.querySelectorAll(".exp").forEach(b => {
+    b.addEventListener("click", () => b.closest(".mrow").classList.toggle("open"));
+  });
+  box.querySelectorAll(".skip").forEach(b => {
+    b.addEventListener("click", async () => {
+      const idx = +b.closest(".mrow").dataset.idx;
+      const skipping = !b.classList.contains("on");
+      await sendOverride(idx, skipping ? {action:"skip"} : {action:"clear"});
+    });
+  });
+  box.querySelectorAll(".clr").forEach(b => {
+    b.addEventListener("click", async () => {
+      const idx = +b.closest(".mrow").dataset.idx;
+      await sendOverride(idx, {action:"clear"});
+    });
+  });
+  box.querySelectorAll(".cand").forEach(c => {
+    c.addEventListener("click", async () => {
+      await sendOverride(+c.dataset.fig, {
+        action:"pick", page:+c.dataset.page, rect: JSON.parse(c.dataset.rect),
+      });
+    });
+  });
+
+  // custom SVG: click to browse, or drag a file onto the drop zone
+  box.querySelectorAll(".svgdrop").forEach(dz => {
+    const idx = +dz.dataset.fig;
+    const input = dz.querySelector(".svgfile");
+    dz.addEventListener("click", e => {
+      if(e.target === input) return;
+      input.click();
+    });
+    input.addEventListener("change", () => {
+      if(input.files[0]) uploadSvg(idx, input.files[0]);
+    });
+    dz.addEventListener("dragover", e => {
+      e.preventDefault(); e.stopPropagation(); dz.classList.add("hot");
+    });
+    dz.addEventListener("dragleave", e => {
+      e.preventDefault(); dz.classList.remove("hot");
+    });
+    dz.addEventListener("drop", async e => {
+      e.preventDefault(); e.stopPropagation(); dz.classList.remove("hot");
+      const f = e.dataTransfer.files[0];
+      if(f && f.name.toLowerCase().endsWith(".svg")) uploadSvg(idx, f);
+      else log("只接受 .svg 文件");
+    });
+  });
+  box.querySelectorAll(".clearsvg").forEach(b => {
+    b.addEventListener("click", async e => {
+      e.stopPropagation();
+      const idx = +b.dataset.fig;
+      const r = await fetch(`/api/clear_svg/${state.job}`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({index: idx}),
+      });
+      const j = await r.json();
+      if(j.error){ showErr(j.error); return; }
+      await refreshMatch();
+      log(`图 ${idx} 已恢复使用 docx 内嵌 SVG`);
+    });
+  });
+}
+
+async function uploadSvg(index, file){
+  const fd = new FormData();
+  fd.append("index", String(index));
+  fd.append("svg", file);
+  const r = await fetch(`/api/upload_svg/${state.job}`, {method:"POST", body:fd});
+  const j = await r.json();
+  if(j.error){ showErr(j.error); return; }
+  await refreshMatch();
+  log(`图 ${index} 已改用 ${file.name}`);
+}
+
+async function refreshMatch(){
+  const s = await (await fetch(`/api/status/${state.job}`)).json();
+  state.report = s.report;
+  renderMatchTable(s);
+  $("#sMatch").classList.add("on");
+  $("#doConvert").style.display = "block";
+  $("#doConvert").disabled = false;
+}
+
+async function sendOverride(index, body){
+  const r = await fetch(`/api/override/${state.job}`, {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({index, ...body}),
+  });
+  const j = await r.json();
+  if(j.error){ showErr(j.error); return; }
+  const s = await (await fetch(`/api/status/${state.job}`)).json();
+  state.report = s.report;
+  renderMatchTable(s);
+  $("#sMatch").classList.add("on");
+  $("#doConvert").style.display = "block";
+  $("#doConvert").disabled = false;
+  log(`已更新图 ${index} 的映射，点「② 开始转换」应用`);
+}
+
+/* ---------------- finish ---------------- */
+function finish(s){
+  const rep = state.report;
+  if(!rep){ showErr("报告为空"); return; }
+  state.namePdf = s.name_pdf || (state.pdf ? state.pdf.name : null);
+
+  state.figs = (rep.figures_detail || []).filter(f => f.status === "replace");
+  state.pageCount = rep.pages || 0;
+  state.page = state.figs.length ? state.figs[0].page : 1;
+
+  $("#outHint").textContent = "替换完成";
+  $("#outFiles").innerHTML =
+    `<div class="file"><span>✅</span>
+     <span class="n">${s.name_pdf.replace(/\.pdf$/i,"")}_vec.pdf</span>
+     <span class="sz">${fmtSize(rep.size_after)}</span></div>`;
+  $("#dl").style.display = "block";
+  $("#dl").onclick = saveAs;
+  $("#dlHint").style.display = "block";
+  $("#dlHint").textContent = supportsSavePicker()
+    ? "点击后将弹出「另存为」对话框，可自选目录"
+    : "当前浏览器不支持另存为对话框，将直接下载到默认目录";
+  $("#dpiSel").disabled = false;
+  if(s.dpi !== undefined) $("#dpiSel").value = String(s.dpi);
+
+  renderReport(rep, s);
+  renderMatchTable(s);
+  $("#sMatch").classList.add("on");
+  $("#sCompare").classList.add("on");
+  renderNav();
+  loadCompare();
+
+  // the convert button stays available so a corrected mapping can be applied
+  // again without re-uploading anything
+  $("#go").disabled = false;
+  $("#doConvert").style.display = "block";
+  $("#doConvert").disabled = false;
+}
+
+/* ---------------- save as ---------------- */
+function supportsSavePicker(){
+  return typeof window.showSaveFilePicker === "function";
+}
+
+async function saveAs(){
+  const base = (state.namePdf
+      ? state.namePdf
+      : (state.pdf ? state.pdf.name : "result.pdf")).replace(/\.pdf$/i, "");
+  const suggested = `${base}_vec.pdf`;
+
+  // IMPORTANT: showSaveFilePicker must be called BEFORE any await.
+  // A user gesture (click) is consumed by the first await, and the browser
+  // then rejects the picker with "Must be handling a user gesture".
+  if(supportsSavePicker()){
+    let handle = null;
+    try{
+      handle = await window.showSaveFilePicker({
+        suggestedName: suggested,
+        types: [{description:"PDF 文档", accept:{"application/pdf":[".pdf"]}}]
+      });
+    }catch(err){
+      if(err && err.name === "AbortError"){
+        $("#dlHint").textContent = "已取消保存";
+        return;
+      }
+      // SecurityError / NotAllowedError / anything else -> fall through to
+      // a plain download, but say so instead of pretending it saved.
+      handle = null;
+      $("#dlHint").textContent = "另存为对话框不可用，改用普通下载…";
+    }
+
+    if(handle){
+      try{
+        const w = await handle.createWritable();
+        const r = await fetch(`/api/download/${state.job}`);
+        if(!r.ok) throw new Error(`HTTP ${r.status}`);
+        await w.write(await r.blob());
+        await w.close();
+        $("#dlHint").textContent = `已保存：${handle.name}`;
+        return;
+      }catch(err){
+        showErr("写入失败：" + err.message);
+        return;
+      }
+    }
+  }
+
+  // Fallback: plain download.
+  const a = document.createElement("a");
+  a.href = `/api/download/${state.job}`;
+  a.download = suggested;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  $("#dlHint").textContent = `已下载：${suggested}`;
+}
+
+/* ---------------- report ---------------- */
+function renderReport(rep, s){
+  // The analysis stage produces a report without verification details
+  // (ok === null); only the convert stage fills them in.
+  if(rep.ok === null || rep.ok === undefined || !rep.details){
+    $("#sReport").classList.remove("on");
+    return;
+  }
+  $("#sReport").classList.add("on");
+
+  const bad = rep.details.filter(p => !p.text_ok || !p.render_ok).length;
+  const v = $("#verdict");
+  v.className = "verdict " + (rep.ok ? "ok" : "bad");
+  v.innerHTML = rep.ok
+    ? `<span style="font-size:22px">✓</span>
+       <div><div class="big">内容未变</div>
+       <div style="font-weight:400;color:#a8e8bd;font-size:12.5px">
+       逐页比对：图区之外的文字与渲染全部一致</div></div>`
+    : `<span style="font-size:22px">!</span>
+       <div><div class="big">检测到差异</div>
+       <div style="font-weight:400;color:#ffc9c5;font-size:12.5px">
+       有 ${bad} 页在图区之外与原文不同，明细见下表</div></div>`;
+
+  const delta = rep.size_after - rep.size_before;
+  const pct = rep.size_before ? (delta/rep.size_before*100).toFixed(0) : 0;
+  const dpiTxt = (s.dpi === 0) ? "保持原样" : `${s.dpi} dpi`;
+  $("#cards").innerHTML = `
+    <div class="card"><div class="k">页数</div><div class="v">${rep.pages}</div></div>
+    <div class="card"><div class="k">替换图</div><div class="v">${rep.figures}</div></div>
+    <div class="card"><div class="k">图区外差异页</div>
+      <div class="v" style="color:${bad?'var(--err)':'var(--ok)'}">${bad}</div></div>
+    <div class="card"><div class="k">体积</div>
+      <div class="v sm">${fmtSize(rep.size_before)} → ${fmtSize(rep.size_after)}</div>
+      <div style="color:var(--muted);font-size:11.5px">${delta>0?'+':''}${pct}%</div></div>
+    <div class="card"><div class="k">照片分辨率</div><div class="v sm">${dpiTxt}</div></div>
+    <div class="card"><div class="k">耗时</div><div class="v sm">${rep.elapsed} 秒</div></div>`;
+
+  const rows = (rep.figures_detail||[]).map(f => {
+    const pill = {replace:'<span class="pill rep">已替换</span>',
+                  vector:'<span class="pill ok">原为矢量</span>',
+                  ambiguous:'<span class="pill amb">有歧义</span>',
+                  'no-match':'<span class="pill nom">未匹配</span>'}[f.status]
+                 || `<span class="pill">${f.status}</span>`;
+    const jump = f.status === "replace"
+      ? `onclick="jumpToFigure(${f.index})" style="cursor:pointer"` : "";
+    return `<tr class="clickable" ${jump}><td>图 ${f.index}</td>
+      <td class="mono">${f.w_pt} × ${f.h_pt} pt</td>
+      <td>${f.page ? 'p'+f.page : '—'}</td>
+      <td>${f.raster_count} 个内嵌位图</td>
+      <td>${pill}</td>
+      <td style="color:var(--muted)">${f.note}</td></tr>`;
+  }).join("");
+  $("#figTable").innerHTML = `
+    <table><thead><tr><th>图</th><th>尺寸</th><th>页</th>
+    <th>SVG 内嵌位图</th><th>判定</th><th>说明</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+
+  // every page, so it is a real page-by-page audit
+  const rows2 = rep.details.map(p => {
+    const t = p.text_ok ? '<span class="pill ok">一致</span>'
+                        : '<span class="pill nom">不同</span>';
+    let r;
+    if(p.render_ok) r = '<span class="pill ok">0 像素差</span>';
+    else if(p.tiny)  r = `<span class="pill tiny">${p.px_diff} 像素（渲染抖动）</span>`;
+    else             r = `<span class="pill nom">${p.px_diff} 像素差</span>`;
+    return `<tr class="clickable" onclick="jumpToPage(${p.page})">
+      <td>p${p.page}</td><td>${t}</td><td>${r}</td>
+      <td style="color:var(--muted)">${p.masked?'图区已遮罩':'整页'}</td></tr>`;
+  }).join("");
+  $("#pageTable").innerHTML = `
+    <table><thead><tr><th>页</th><th>图区外文字</th>
+    <th>图区外渲染</th><th>比对范围</th></tr></thead>
+    <tbody>${rows2}</tbody></table>`;
+}
+
+/* ---------------- nav ---------------- */
+function renderNav(){
+  const rep = state.report;
+  const hasFig = new Set((rep.details||[]).filter(p=>p.masked).map(p=>p.page));
+  const figPages = new Set(state.figs.map(f=>f.page));
+
+  if(state.scope === "page"){
+    const marks = (rep.details||[]).map(p =>
+      `<i class="${hasFig.has(p.page)?'has':''} ${p.page===state.page?'cur':''}"
+          data-p="${p.page}" title="p${p.page}"></i>`).join("");
+    $("#nav").innerHTML = `
+      <div class="pg">
+        <button id="pPrev">◀</button>
+        <input type="number" id="pNum" min="1" max="${state.pageCount}" value="${state.page}">
+        <span class="total">/ ${state.pageCount}</span>
+        <button id="pNext">▶</button>
+      </div>
+      <div class="pagemark">${marks}</div>`;
+    $("#pPrev").onclick = () => jumpToPage(state.page - 1);
+    $("#pNext").onclick = () => jumpToPage(state.page + 1);
+    $("#pNum").onchange = e => jumpToPage(+e.target.value);
+    $$(".pagemark i").forEach(el =>
+      el.onclick = () => jumpToPage(+el.dataset.p));
+  } else {
+    $("#nav").innerHTML = `<div class="fignav">` +
+      state.figs.map((f,i) =>
+        `<button data-i="${i}" class="${i===state.figIdx?'on':''}">
+           图 ${f.index} · p${f.page}</button>`).join("") + `</div>`;
+    $$(".fignav button").forEach(b => b.onclick = () => {
+      state.figIdx = +b.dataset.i;
+      state.page = state.figs[state.figIdx].page;
+      $$(".fignav button").forEach(x => x.classList.toggle("on", x===b));
+      loadCompare();
+    });
+  }
+}
+
+function jumpToPage(p){
+  p = Math.max(1, Math.min(state.pageCount, p));
+  state.page = p;
+  if(state.scope !== "page"){ state.scope = "page"; syncScope(); }
+  renderNav();
+  loadCompare();
+}
+function jumpToFigure(idx){
+  const i = state.figs.findIndex(f => f.index === idx);
+  if(i < 0) return;
+  state.scope = "figure";
+  state.figIdx = i;
+  state.page = state.figs[i].page;
+  syncScope(); renderNav(); loadCompare();
+  $("#sCompare").scrollIntoView({behavior:"smooth", block:"start"});
+}
+window.jumpToPage = jumpToPage;
+window.jumpToFigure = jumpToFigure;
+
+/* ---------------- compare ---------------- */
+function currentFigure(){
+  return state.scope === "figure" ? state.figs[state.figIdx] : null;
+}
+
+function loadCompare(){
+  if(!state.job) return;
+  const f = currentFigure();
+  let src, dst, label;
+
+  if(f){
+    const q = `job=${state.job}&page=${f.page}&rect=${f.rect.join(",")}&dpi=150`;
+    src = `/api/preview?which=orig&${q}`;
+    dst = `/api/preview?which=result&${q}`;
+    label = `图 ${f.index} · p${f.page} · ${f.w_pt}×${f.h_pt} pt`;
+  } else {
+    const q = `job=${state.job}&page=${state.page}&dpi=110`;
+    src = `/api/page?which=orig&${q}`;
+    dst = `/api/page?which=result&${q}`;
+    label = `第 ${state.page} 页 / 共 ${state.pageCount} 页`;
+  }
+
+  $("#cmpLabel").textContent = label;
+  $("#imgOrig").src = src;
+  $("#imgNew").src = dst;
+  if(state.mode === "side") $("#sideNew").src = dst;
+
+  applyMode();
+  placeDivider(state.pos);
+}
+
+function syncScope(){
+  $$(".scope button").forEach(b =>
+    b.classList.toggle("on", b.dataset.scope === state.scope));
+}
+
+$$(".scope button").forEach(b => b.onclick = () => {
+  state.scope = b.dataset.scope;
+  syncScope(); renderNav(); loadCompare();
+});
+
+$$(".tab").forEach(t => t.onclick = () => {
+  state.mode = t.dataset.mode;
+  $$(".tab").forEach(x => x.classList.toggle("on", x === t));
+  applyMode(); placeDivider(state.pos);
+});
+
+function applyMode(){
+  const stage = $("#stage"), top = $("#topWrap"), div = $("#divider");
+  const hint = $("#modeHint");
+
+  stage.classList.remove("sbs");
+  top.style.display = "block";
+  top.style.opacity = "1";
+  top.style.mixBlendMode = "normal";
+  $("#imgOrig").style.width = "100%";
+  $("#sideNew").style.display = "none";
+  div.style.display = "block";
+
+  if(state.mode === "side"){
+    stage.classList.add("sbs");
+    stage.style.cursor = "default";
+    div.style.display = "none";
+    top.style.display = "none";
+    $("#imgOrig").style.width = "50%";
+    $("#sideNew").style.display = "block";
+    $("#sideNew").src = $("#imgNew").src;
+    hint.textContent = "左侧 = 原 PDF，右侧 = 替换后（同一位置并排）";
+    return;
+  }
+  if(state.mode === "overlay"){
+    stage.style.cursor = "ew-resize";
+    div.style.display = "none";
+    top.style.clipPath = "none";
+    top.style.opacity = "0.55";
+    hint.textContent = "左右移动鼠标改变叠层透明度：左→看清原图，右→看清替换后";
+    return;
+  }
+  stage.style.cursor = "col-resize";
+  hint.textContent = "拖动竖线左右移动，比较同一位置的两版渲染";
+}
+
+function placeDivider(p){
+  state.pos = Math.max(0, Math.min(1, p));
+  const pctv = (state.pos*100).toFixed(2) + "%";
+  if(state.mode === "wipe"){
+    $("#divider").style.left = pctv;
+    $("#topWrap").style.clipPath = `inset(0 0 0 ${pctv})`;
+  } else if(state.mode === "side"){
+    $("#topWrap").style.clipPath = "none";
+  }
+}
+
+let dragging = false;
+function moveTo(clientX){
+  const r = $("#stage").getBoundingClientRect();
+  const p = (clientX - r.left) / r.width;
+  if(state.mode === "overlay"){
+    $("#topWrap").style.opacity = (0.12 + 0.8*Math.max(0,Math.min(1,p))).toFixed(2);
+  } else if(state.mode === "wipe"){
+    placeDivider(p);
+  }
+}
+$("#stage").addEventListener("pointerdown", e => {
+  if(state.mode === "side") return;
+  dragging = true;
+  $("#stage").setPointerCapture(e.pointerId);
+  moveTo(e.clientX);
+});
+$("#stage").addEventListener("pointermove", e => { if(dragging) moveTo(e.clientX); });
+$("#stage").addEventListener("pointerup", () => dragging = false);
+$("#stage").addEventListener("pointerleave", () => dragging = false);
+
+/* keyboard: arrows step pages when in page scope */
+document.addEventListener("keydown", e => {
+  if(!state.report) return;
+  if(e.target.tagName === "INPUT") return;
+  if(state.scope !== "page") return;
+  if(e.key === "ArrowLeft")  jumpToPage(state.page - 1);
+  if(e.key === "ArrowRight") jumpToPage(state.page + 1);
+});
+
+/* ---------------- boot with ?job= ---------------- */
+(function boot(){
+  const j = new URLSearchParams(location.search).get("job");
+  if(!j) return;
+  state.job = j;
+  $("#prog").classList.add("on");
+  $("#barfill").className = "indet";
+  $("#outHint").textContent = "载入已有任务…";
+  poll();
+})();
+</script>
+</body>
+</html>

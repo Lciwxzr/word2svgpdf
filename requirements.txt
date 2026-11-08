@@ -1,0 +1,19 @@
+# Pinned versions so the environment can be rebuilt exactly.
+# See DEPENDENCIES.md for the licence of every package.
+# Keep this file ASCII-only: pip reads it with the system locale codec on
+# Windows (cp936 here), and non-ASCII comments make it fail.
+
+# PDF reading layer (rendering / text / image location)
+pypdfium2==5.15.0
+# PDF writing layer (object-level edits, keeps object numbers)
+pikepdf==10.17.0
+
+starlette==1.0.0
+uvicorn==0.42.0
+python-multipart==0.0.22
+pillow==10.3.0
+lxml==6.1.0
+
+# Global one-to-one figure assignment (Hungarian algorithm).
+# Falls back to greedy matching when missing.
+scipy==1.13.1

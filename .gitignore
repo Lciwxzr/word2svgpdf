@@ -1,0 +1,22 @@
+# Build artefacts -- recreate with setup.bat / tools/make_portable.py
+env/
+portable/
+__pycache__/
+*.pyc
+.cache/
+
+# Job outputs and logs
+_job_*/
+*.log
+
+# Wheel cache: optional. Generate with tools/collect_wheels.py or make_wheels.bat.
+# Keep the folder in a release archive, but not in version control.
+wheels/
+
+# Local-only notes. Kept on the author's machine, not published.
+# The READMEs are the only documentation that ships.
+DEVELOPMENT.md
+DEPENDENCIES.md
+OUT-OF-BOX.md
+WHY-INKSCAPE.md
+RELEASING.md
